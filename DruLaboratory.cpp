@@ -1,226 +1,447 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
 #include <stdio.h>
+#include <time.h>
 
 #define ANSI_RESET_ALL     "\x1b[0m"
-#define STYLE_BOLD         "\x1b[1m"
 #define COLOR_RED          "\x1b[31m"
 #define COLOR_GREEN        "\x1b[32m"
-#define COLOR_YELLOW       "\x1b[33m"
-#define COLOR_MAGENTA      "\x1b[35m"
 
-#define MAX_ROUTE 20
-#define MAX_ROUTE_LEN 100
-#define ROUTE_PROPERTIES 7
-#define END_INPUT "###"
+#define WIDTH 60 // стенка два символа
+#define HEIGHT 29
 
-#define TAG_NUM_PHONE 0
-#define TAG_PLANE 1
-#define TAG_CITY 2
-#define TAG_DAYS_OF_WEEK 3
-#define TAG_TIME_FROM 4
-#define TAG_TIME_TO 5
-#define TAG_PRICE 6
+#define EMPTY_TAG '1'
+#define WALL_TAG '2'
+#define PLAYER_TAG '3'
+#define START_TAG '4'
+#define FINISH_TAG '5'
 
 /*
-N3. Разработка программного обеспечения для учета данных об авиарейсах
-№ 3 Массив строк «Аэропорт»
-
-Запрос: определить все рейсы до заданного города, которые проводятся на определенном
-типе самолета, и цена билетов на которые не выше некоторой заданной цены.
-
-3 boing777 Moscow 1256 10:30 10:50 16450
-12 airbus230 Moscow 1256 14:10 14:20 6710
-71 boing777 Moscow 125 6:45 6:55 1300 12780
-8 boing777 Novosibirsk 234 12:30 13:45 1300
-26 airbus230 Moscow 1256 21:35 21:50 7600
-23 airbus230 Novosibirsk 1467 6:30 7:40 1940
-52 boing777 Novosibirsk 2567 17:05 18:10 2500
-###
+ длина консоли 120, ширина 30
+ Лабиринт с монстрами
+ Ведется стаистика прохождения времени и сохраняется в rate.txt
+ Уровень хранится в level_1.txt
 */
-void request3(
-    char* response[MAX_ROUTE][ROUTE_PROPERTIES],
-    int* responseLen,
-    char* data[MAX_ROUTE][ROUTE_PROPERTIES],
-    int len,
-    char* city,
-    char* plane,
-    char* maxPrice)
+typedef struct Point {
+	int x, y;
+};
+
+int comparePoint(Point p1, Point p2) 
 {
-    for (int i = 0; i < len; i++)
-    {
-        if (
-            (city == NULL || strcmp(city, "-") == 0 || strcmp(data[i][TAG_CITY], city) == 0) &&
-            (plane == NULL || strcmp(plane, "-") == 0 || (strcmp(data[i][TAG_PLANE], plane) == 0)) &&
-            (maxPrice == NULL || strcmp(maxPrice, "-") == 0 ||(strtof(data[i][TAG_PRICE], NULL) <= strtof(maxPrice, NULL)))
-            )
-        {
-            for (int property_i = 0; property_i < ROUTE_PROPERTIES; property_i++)
-            {
-                response[*responseLen][property_i] = data[i][property_i];
-            }          
-            (*responseLen)++;
-        }
-    }
+	return p1.x == p2.x && p1.y == p2.y;
+}
+// выгрузка карты из базы данных
+int loadMapFromFile(char* map)
+{
+	FILE* levelDB;
+	levelDB = fopen("level_1.txt", "r");
+	if (levelDB == NULL) return 0;
+	char symbol;
+
+	for (int y = 0; y < HEIGHT; y++)
+		for (int x = 0; x <= WIDTH; x++)
+		{
+			symbol = getc(levelDB);
+			//putchar(symbol);
+			if (symbol == EOF) {}
+			else if (symbol == 0) {}
+			else if (symbol == '\n') { break; }
+			else
+			{
+				*(map + y * WIDTH + x) = symbol;
+			}
+		}
+
+	fclose(levelDB);
 }
 
-// ввод рейсов
-void addRoutes(int* len, char* data[MAX_ROUTE][ROUTE_PROPERTIES])
+// отрисовка карты
+void drawMap(char* map, Point player, int countEnemies, Point* enemies)
 {
-    printf("Enter the data of routes as follows:\n");
-    printf(COLOR_YELLOW "number" COLOR_MAGENTA " plane" COLOR_YELLOW " city" COLOR_MAGENTA " days of week" COLOR_YELLOW " departure time" COLOR_MAGENTA " arrival time" COLOR_YELLOW " price" ANSI_RESET_ALL"\n");
-    printf("Enter \"###\" to end\n");
+	system("CLS");
+	int isDrawCharacter;
 
-    // пока не будет обнаружен символ ### и массив не закончился
-    while (*len < MAX_ROUTE)
-    {
-        char* str = (char*)calloc(MAX_ROUTE_LEN, sizeof(char));
-        gets_s(str, MAX_ROUTE_LEN);
+	for (int y = 0; y < HEIGHT; y++)
+	{
+		for (int x = 0; x < WIDTH; x++)
+		{
+			isDrawCharacter = 0;
+			if (player.x == x && player.y == y)
+			{ 
+				putchar(1); putchar(' '); isDrawCharacter = 1; 
+			}
 
-        char* word = strtok(str, " ,.");
-        if (strcmp(word, END_INPUT) == 0) break;
+			if (isDrawCharacter == 0)
+			for (int i = 0; i < countEnemies; i++)
+				if ((*(enemies + i)).x == x && (*(enemies + i)).y == y)
+				{
+					putchar('}'); putchar('{'); isDrawCharacter = 1;
+				}
 
-        for (int property_i = 0; property_i < ROUTE_PROPERTIES && word != NULL; property_i++)
-        {
-            data[*len][property_i] = word;
-            //printf("> %s\n", word);
-            word = strtok(NULL, " ,.");
-
-        }
-        (*len)++;
-    }
+			if (isDrawCharacter == 0)
+			switch (*(map + y * WIDTH + x))
+			{
+				case EMPTY_TAG: {
+					putchar(' '); putchar(' ');
+					break;
+				}
+				case WALL_TAG: {
+					putchar(219); putchar(219);
+					break;
+				}
+				case START_TAG: {
+					putchar(' '); putchar(' ');
+					break;
+				}
+				case FINISH_TAG: {
+					putchar(177); putchar(177);
+					break;
+				}
+				default: {
+					putchar('*'); putchar('*');
+					break;
+				}
+			}
+		}
+		putchar('\n');
+	}
 }
 
-// печать рейсов
-void printRoutes(int len, char* data[MAX_ROUTE][ROUTE_PROPERTIES])
+// проверка на столкновение с монстром
+int playerCollisionEnemy(Point player, int countEnemies, Point* enemies)
 {
-    putchar(201);
-    for (int i = 0; i < 5; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 11; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 14; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 9; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(203);
-    for (int i = 0; i < 10; i++) putchar(205);
-    putchar(187);
-    printf("\n");
-
-    putchar(186);
-    printf(STYLE_BOLD " %-3.3s " ANSI_RESET_ALL, "Num"); putchar(186);
-    printf(STYLE_BOLD " %-9.9s " ANSI_RESET_ALL, "plane"); putchar(186);
-    printf(STYLE_BOLD " %-12.12s " ANSI_RESET_ALL, "city"); putchar(186);
-    printf(STYLE_BOLD " %-7.7s " ANSI_RESET_ALL, "days"); putchar(186);
-    printf(STYLE_BOLD " %-6.6s " ANSI_RESET_ALL, "departure"); putchar(186);
-    printf(STYLE_BOLD " %-6.6s " ANSI_RESET_ALL, "landing"); putchar(186);
-    printf(STYLE_BOLD " %-8.8s " ANSI_RESET_ALL, "price"); putchar(186);
-    putchar('\n');
-
-    putchar(204);
-    for (int i = 0; i < 5; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 11; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 14; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 9; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(206);
-    for (int i = 0; i < 10; i++) putchar(205);
-    putchar(185);
-    printf("\n");
-
-    for (int i = 0, j = 0; i < len; i++)
-    {
-        j = 0;
-        putchar(186);
-        printf(" %-3.3s ", data[i][j++]); putchar(186);
-        printf(" %-9.9s ", data[i][j++]); putchar(186);
-        printf(" %-12.12s ", data[i][j++]); putchar(186);
-        printf(" %-7.7s ", data[i][j++]); putchar(186);
-        printf(" %-6.6s ", data[i][j++]); putchar(186);
-        printf(" %-6.6s ", data[i][j++]); putchar(186);
-        printf(" %-8.8s ", data[i][j]); putchar(186);
-        putchar('\n');
-
-        if (i + 1 != len)
-        {
-            putchar(204);
-            for (int i = 0; i < 5; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 11; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 14; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 9; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 8; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 8; i++) putchar(205);
-            putchar(206);
-            for (int i = 0; i < 10; i++) putchar(205);
-            putchar(185);
-            printf("\n");
-        }
-    }
-
-    putchar(200);
-    for (int i = 0; i < 5; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 11; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 14; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 9; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 8; i++) putchar(205);
-    putchar(202);
-    for (int i = 0; i < 10; i++) putchar(205);
-    putchar(188);
-    printf("\n\n");
+	for (int i = 0; i < countEnemies; i++)
+		if (comparePoint(player, enemies[i]))
+			return 1;
+	return 0;
 }
 
-int main()
-{
-    char
-        *data[MAX_ROUTE][ROUTE_PROPERTIES],
-        *responseData[MAX_ROUTE][ROUTE_PROPERTIES];
-    int 
-        len = 0,
-        responseLen = 0;
+// ход монстров
+void enemyMove(char* map, Point player, int countEnemies, Point* enemies)
+{ // ИИ противника
+	int _x, _y;
+	int returnFlag;
+	for (int i = 0; i < countEnemies; i++)
+	{
+		returnFlag = 0;
+		_x = enemies[i].x;
+		_y = enemies[i].y;
+		//if (enemies[i].x == player.x || enemies[i].y == player.y)
+		while (returnFlag == 0) {
+			if (_y == player.y)
+			{
+				if (_x < player.x) // игрок справа
+				{
+					// игрок в прямой видимости - движемся в его сторону
+					if (_x + 1 == player.x) {
+						enemies[i].x++; returnFlag = 1;
+					}
+					// игрок не в прямой видимости
+					if (*(map + _y * WIDTH + _x + 1) == WALL_TAG)
+						returnFlag = 1;
 
-    addRoutes(&len, data);  
 
-     while (1)
-     {
-        printf("\tALL ROUTES\n");
-        printRoutes(len, data);
+					// проверяем следующию клетку
+					if (_x == WIDTH - 1) returnFlag = 1;
+					else _x++;
+				}
+				else // игрок слева
+				{
+					// игрок в прямой видимости - движемся в его сторону
+					if (_x - 1 == player.x) {
+						enemies[i].x--; returnFlag = 1;
+					}
+					// игрок не в прямой видимости
+					if (*(map + _y * WIDTH + _x - 1) == WALL_TAG)
+						returnFlag = 1;
 
-        responseLen = 0;
+					// проверяем следующию клетку
+					if (_x == 0) returnFlag = 1;
+					else _x--;
+				}
+			}
+			else if (_x == player.x)
+			{
+				if (_y < player.y) // игрок снизу
+				{
+					// игрок в прямой видимости - движемся в его сторону
+					if (_y + 1 == player.y) {
+						enemies[i].y++; returnFlag = 1;
+					}
+					// игрок не в прямой видимости
+					if (*(map + (_y + 1) * WIDTH + _x) == WALL_TAG)
+						returnFlag = 1;
 
-        printf("Enter necessary" COLOR_MAGENTA " city" COLOR_YELLOW " plane" COLOR_MAGENTA " max price" ANSI_RESET_ALL " or \"-\" to skip property:\n\t");
-        
-        char str[30];
-        gets_s(str, 30);
-        char
-            * city = strtok(str, " .,"), 
-            * plane = strtok(NULL, " .,"),
-            * price = strtok(NULL, " .,");
-        if (city != NULL && strcmp(city, END_INPUT) == 0) break;
+					// проверяем следующию клетку
+					if (_y == HEIGHT + 1) returnFlag = 1;
+					else _y++;
+				}
+				else // игрок сверху
+				{
+					// игрок в прямой видимости - движемся в его сторону
+					if (_y - 1 == player.y) {
+						enemies[i].y--; returnFlag = 1;
+					}
+					// игрок не в прямой видимости
+					if (*(map + (_y - 1) * WIDTH + _x) == WALL_TAG)
+						returnFlag = 1;
 
-        request3(responseData, &responseLen, data, len, city, plane, price);
+					// проверяем следующию клетку
+					if (_y == 0) returnFlag = 1;
+					else _y--;
+				}
+			}
+			else { //рандом ход
+				int countVectors = 0,
+					vectors[4] = {0, 0, 0, 0};
+				if (enemies[i].y != 0 && *(map + (enemies[i].y - 1) * WIDTH + enemies[i].x) != WALL_TAG)
+				{
+					vectors[0] = 1; countVectors++;
+				}
+				if (enemies[i].x != 0 && *(map + enemies[i].y * WIDTH + enemies[i].x - 1) != WALL_TAG) 
+				{
+					vectors[1] = 1; countVectors++;
+				}
+				if (enemies[i].y != HEIGHT - 1 && *(map + (enemies[i].y + 1) * WIDTH + enemies[i].x) != WALL_TAG)
+				{
+					vectors[2] = 1; countVectors++;
+				}
+				if (enemies[i].x != WIDTH - 1 && *(map + enemies[i].y * WIDTH + enemies[i].x + 1) != WALL_TAG) 
+				{
+					vectors[3] = 1; countVectors++;
+				}
 
-        if (responseLen) printRoutes(responseLen, responseData);
-        else printf(COLOR_RED "Data not found" ANSI_RESET_ALL "\n");
-     }
+				if (countVectors != 0)
+				{
+					int j = 0,randomVector = rand() % countVectors;
+					for (int k = 0; k < 4 && returnFlag == 0; k++)
+					{	
+						if (vectors[k] != 0)
+						{
+
+							if (randomVector == j)
+							{
+								switch (k)
+								{
+									case 0: {
+										enemies[i].y--; break;
+									}
+									case 1: {
+										enemies[i].x--; break;
+									}
+									case 2: {
+										enemies[i].y++; break;
+									}
+									case 3: {
+										enemies[i].x++; break;
+									}
+									default: break;
+									}
+								returnFlag = 1;
+							}
+							else j++;
+						}
+					}
+						
+
+				} 
+				returnFlag = 1;
+			
+			}
+		}
+	}
 }
+
+// расстановка монстров на карте
+void initEnemies(int count, Point* enemies)
+{
+	for (int i = 0; i < count; i++)
+	{
+		(*(enemies + i)).x = rand() % (WIDTH - 2) + 1;
+		(*(enemies + i)).y = rand() % (HEIGHT - 5) + 1;
+	}
+}
+
+// определдение позиции игрока на карте
+void initPlayer(char* map, Point* player)
+{
+	for (int y = 0; y < HEIGHT; y++)
+		for (int x = 0; x <= WIDTH; x++)
+			if (*(map + y * WIDTH + x) == START_TAG)
+			{
+				(*player).x = x;
+				(*player).y = y;
+			}
+}
+/* endGame
+* 0 игра продоложается
+* 1 игрок проиграл 
+* 2 выиграл
+*/
+// игровой ход - ожидание действия игрока
+int gameMove()
+{
+
+	char* map = (char*) calloc(HEIGHT * WIDTH, sizeof(Point));
+	int isMovePlayer, countEnemies = 10, endGame = 0;
+	loadMapFromFile(map);
+
+	Point player = {2, 2};
+	Point* enemies = (Point*)calloc(HEIGHT * WIDTH, sizeof(Point));
+
+	initEnemies(countEnemies, enemies);
+	initPlayer(map, &player);
+
+	drawMap(map, player, countEnemies, enemies);
+	char code;
+
+	while (1)
+	{
+		isMovePlayer = 0;
+		code = _getwch();
+		switch (code)
+		{
+			case 'w': {
+				if (player.y != 0 && *(map + (player.y - 1) * WIDTH + player.x) != WALL_TAG)
+				{ player.y--; isMovePlayer = 1; }
+				break;
+			}
+			case 'a': {
+				if (player.x != 0 && *(map + player.y * WIDTH + player.x - 1) != WALL_TAG)
+					{ player.x--; isMovePlayer = 1; }
+				break;
+			}
+			case 's': {
+				if (player.y != HEIGHT - 1 && *(map + (player.y + 1) * WIDTH + player.x) != WALL_TAG)
+					{ player.y++; isMovePlayer = 1; }
+				break;
+			}
+			case 'd': {
+				if (player.x != WIDTH - 1&& *(map + player.y * WIDTH + player.x + 1) != WALL_TAG)
+					{ player.x++; isMovePlayer = 1; }
+				break;
+			}
+			default: break;
+		}
+		if (isMovePlayer)
+		{
+			if (playerCollisionEnemy(player, countEnemies, enemies)) return 1;
+
+			// Игрок сделал ход - теперь нужно чтобы сходил противник (бот) 
+			enemyMove(map, player, countEnemies, enemies);
+
+			if (playerCollisionEnemy(player, countEnemies, enemies)) return 1;
+
+			if (*(map + player.y * WIDTH + player.x) == FINISH_TAG) return 2;
+
+
+			drawMap(map, player, countEnemies, enemies);
+		}
+	}
+
+}
+
+void saveRate(char* nick, int time)
+{
+	FILE* rateDB;
+	rateDB = fopen("D:/Andrei/projects/consolePrj/DruLaboratory/rate.txt", "r+");
+	if (rateDB == NULL) return;
+
+	char *line = (char*)calloc(22, sizeof(char));
+	char _nick[10];
+	int _time, isFind = 0;
+	long offset = 0;
+
+	while (fgets(line, 22, rateDB) != NULL) 
+	{
+		line = strtok(line, " ");
+		if (line == NULL) break;
+		strcpy(_nick, line);
+
+		line = strtok(NULL, " ");
+		if (line == NULL || atoi(line) == NULL) break;
+		_time = atoi(line);
+
+		if (strcmp(_nick, nick) == 0)
+		{
+			if (time >= _time)
+				isFind = -1;
+			else {
+				offset = ftell(rateDB) - 21;
+				isFind = 1;
+			}
+			break;
+		}
+	}
+	if (isFind != -1)
+	{
+		if (isFind == 1 && fseek(rateDB, offset, SEEK_SET) == 0)
+			fprintf(rateDB, "%10.10s %.10d", nick, time);
+		else if (isFind == 0 && fseek(rateDB, 0, SEEK_END) == 0)
+			fprintf(rateDB, "%10.10s %.10d", nick, time);
+	}
+
+	fclose(rateDB);
+}
+
+void printRateTable()
+{
+	FILE* rateDB;
+	rateDB = fopen("D:/Andrei/projects/consolePrj/DruLaboratory/rate.txt", "r");
+	if (rateDB == NULL) return;
+
+	char * nick, * line = (char*)calloc(22, sizeof(char));
+
+	printf("\n\tTable of rate\n");
+	for (int i = 0; i < 27; i++) putchar('~');
+	printf("\n| %-10.10s | %10.10s |\n", "Nick", "best time");
+
+	while (fgets(line, 22, rateDB) != NULL)
+	{
+		nick = strtok(line, " ");
+		line = strtok(NULL, " ");
+		for (int i = 0; i < 27; i++) putchar('~');
+		printf("\n| %-10.10s | %10.d |\n", nick, atoi(line));
+	}
+	for (int i = 0; i < 27; i++) putchar('~');
+	putchar('\n');
+}
+
+void menu()
+{
+	time_t timer = time(NULL);
+	int lastGameStatus = 0;
+	char nick[20];
+
+	while (1)
+	{
+		switch (lastGameStatus)
+		{
+			case 0: { // игр еще не было
+				break;
+			}
+			case 1: { // проиграл
+				printf(COLOR_RED "\nYou lose!\n" ANSI_RESET_ALL);
+				break;
+			}
+			case 2: { // выиграл
+				int curTime = int(time(NULL) - timer);
+				printf(COLOR_GREEN "\nYou win!\n" ANSI_RESET_ALL);
+				printf("\nComplietion time = %ld sec\n", curTime);
+				saveRate(nick, curTime);
+				break;
+			}
+			default:break;
+		}
+		printRateTable();
+
+		printf("\nEnter your Nick to start game:");
+		while (scanf("%s", nick) == 0);
+
+		timer = time(NULL);
+		lastGameStatus = gameMove();
+	}
+}
+
+
+int main() { menu(); }

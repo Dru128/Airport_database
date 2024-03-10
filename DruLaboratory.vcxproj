@@ -131,6 +131,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DruLaboratory.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="DruLaboratory.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="level_1.txt" />
+    <Text Include="rate.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
